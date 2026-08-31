@@ -5,7 +5,6 @@ import android.app.Application
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.drawable.BitmapDrawable
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.audiofx.Visualizer
@@ -30,6 +29,7 @@ import androidx.palette.graphics.Palette
 import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import com.example.musicapp.data.FavoritesManager
 import com.example.musicapp.data.MusicDatabase
 import com.example.musicapp.data.MusicRepository
 import com.example.musicapp.model.*
@@ -47,6 +47,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.hypot
 import kotlin.math.pow
 import androidx.core.graphics.ColorUtils
+import androidx.core.graphics.drawable.toBitmap
 
 data class QueueItem(val index: Int, val song: Song, val isManual: Boolean)
 
@@ -56,6 +57,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = application.getSharedPreferences("music_app_prefs", Context.MODE_PRIVATE)
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val repository = MusicRepository(context, MusicDatabase.getDatabase(application))
+    private val favoritesManager = FavoritesManager(application)
 
     private var mediaController: MediaController? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
@@ -397,8 +399,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     .build()
                 val result = loader.execute(request)
 
-                if (result is coil.request.SuccessResult && result.drawable is android.graphics.drawable.BitmapDrawable) {
-                    val palette = Palette.from((result.drawable as android.graphics.drawable.BitmapDrawable).bitmap).generate()
+                if (result is coil.request.SuccessResult) {
+                    val bitmap = result.drawable.toBitmap()
+                    val palette = Palette.from(bitmap).generate()
 
                     // Získáme základní barvu (ideálně tmavší, ale zářivou)
                     val topSwatch = palette.darkVibrantSwatch ?: palette.vibrantSwatch ?: palette.dominantSwatch
@@ -414,7 +417,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
                     val vibrantRgb = ColorUtils.HSLToColor(hsl)
                     val topColor = Color(vibrantRgb)
-                    // ---------------------------------------------
+                    // ----------------------------------------------
 
                     val isLight = topColor.luminance() > 0.5f
                     _playerContentColor.value = if (isLight) Color.Black else Color.White
@@ -488,7 +491,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun toggleParticles(v: Boolean) { _isParticlesEnabled.value = v; prefs.edit().putBoolean("particles_enabled", v).apply() }
     fun togglePulse(v: Boolean) { _isPulseEnabled.value = v; prefs.edit().putBoolean("pulse_enabled", v).apply() }
 
-    fun refreshFavorites() {}
+    fun refreshFavorites() {
+        _favoriteIds.value = favoritesManager.getFavorites()
+    }
+
+    fun toggleFavorite(song: Song) {
+        favoritesManager.toggleFavorite(song.uri)
+        refreshFavorites()
+    }
+
+    fun isFavorite(uri: Uri) = favoritesManager.isFavorite(uri)
     fun switchTab(t: LibraryTab) { _libraryTab.value = t }
     fun selectAlbum(a: Album) { _filteredSongs.value = _allSongs.value.filter { it.albumId == a.id }; _filterTitle.value = a.title }
     fun selectArtist(a: Artist) { _filteredSongs.value = _allSongs.value.filter { it.artist.contains(a.name) }; _filterTitle.value = a.name }

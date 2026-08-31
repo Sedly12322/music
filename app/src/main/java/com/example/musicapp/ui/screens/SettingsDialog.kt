@@ -122,7 +122,7 @@ fun SettingsDialog(
                 SwitchRow("Zrcadlení vizualizéru", isVisualizerMirrored) { viewModel.toggleVisualizerMirroring(it) }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Divider(color = Color.Gray.copy(alpha = 0.2f))
+                HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f))
                 Spacer(modifier = Modifier.height(16.dp))
 
                 SwitchRow("Displej vždy zapnutý", isScreenAlwaysOn) { viewModel.toggleAlwaysOn(it) }
@@ -134,7 +134,7 @@ fun SettingsDialog(
                 SwitchRow("Pulzování obalu", isCoverBounceEnabled) { viewModel.toggleCoverBounce(it) }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Divider(color = Color.Gray.copy(alpha = 0.2f))
+                HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f))
                 Spacer(modifier = Modifier.height(16.dp))
 
                 SliderRow("Citlivost vizualizéru", visualizerSensitivity, 0.5f..2.0f) { viewModel.setVisualizerSensitivity(it) }

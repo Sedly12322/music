@@ -11,8 +11,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import androidx.compose.material3.*
 import com.example.musicapp.model.*
 import com.example.musicapp.viewmodel.MusicViewModel
 
@@ -208,7 +209,7 @@ fun PlaylistRow(playlist: Playlist, onClick: () -> Unit) {
                         .background(Color.White.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    val iconType = if (playlist.isSystem) Icons.Rounded.Favorite else Icons.Rounded.QueueMusic
+                    val iconType = if (playlist.isSystem) Icons.Rounded.Favorite else Icons.AutoMirrored.Rounded.QueueMusic
                     Icon(iconType, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
                 }
                 Spacer(modifier = Modifier.width(20.dp))

@@ -71,7 +71,7 @@ class MusicRepository(private val context: Context, private val db: MusicDatabas
                 val data = json.optJSONArray("data")
                 if (data != null && data.length() > 0) {
                     val artistObj = data.getJSONObject(0)
-                    artistObj.optString("picture_xl", null) ?: artistObj.optString("picture_medium", null)
+                    artistObj.optString("picture_xl") ?: artistObj.optString("picture_medium")
                 } else null
             } else null
         } catch (e: Exception) {

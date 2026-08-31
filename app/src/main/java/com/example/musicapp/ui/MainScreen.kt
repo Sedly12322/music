@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
@@ -369,8 +370,8 @@ fun MusicAppScaffold(viewModel: MusicViewModel) {
         if (showAddToPlaylistDialog && songToAddToPlaylist != null) {
             AlertDialog(onDismissRequest = { showAddToPlaylistDialog = false }, title = { Text("Přidat do playlistu", color = Color.White) }, text = {
                 LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
-                    item { Row(modifier = Modifier.fillMaxWidth().clickable { showAddToPlaylistDialog = false; showCreatePlaylistDialog = true }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Add, null, tint = Color(0xFFBB86FC)); Spacer(modifier = Modifier.width(16.dp)); Text("Nový playlist", color = Color.White, fontWeight = FontWeight.Bold) }; Divider(color = Color.Gray.copy(alpha = 0.2f)) }
-                    items(allPlaylists) { playlist -> Row(modifier = Modifier.fillMaxWidth().clickable { viewModel.addSongToPlaylist(playlist, songToAddToPlaylist!!); showAddToPlaylistDialog = false }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.QueueMusic, null, tint = Color.Gray); Spacer(modifier = Modifier.width(16.dp)); Text(playlist.name, color = Color.White); if (playlist.isSystem) { Spacer(modifier = Modifier.width(8.dp)); Text("(Systémový)", color = Color.Gray, fontSize = 10.sp) } } }
+                    item { Row(modifier = Modifier.fillMaxWidth().clickable { showAddToPlaylistDialog = false; showCreatePlaylistDialog = true }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Rounded.Add, null, tint = Color(0xFFBB86FC)); Spacer(modifier = Modifier.width(16.dp)); Text("Nový playlist", color = Color.White, fontWeight = FontWeight.Bold) }; HorizontalDivider(color = Color.Gray.copy(alpha = 0.2f)) }
+                    items(allPlaylists) { playlist -> Row(modifier = Modifier.fillMaxWidth().clickable { viewModel.addSongToPlaylist(playlist, songToAddToPlaylist!!); showAddToPlaylistDialog = false }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.AutoMirrored.Rounded.QueueMusic, null, tint = Color.Gray); Spacer(modifier = Modifier.width(16.dp)); Text(playlist.name, color = Color.White); if (playlist.isSystem) { Spacer(modifier = Modifier.width(8.dp)); Text("(Systémový)", color = Color.Gray, fontSize = 10.sp) } } }
                 }
             }, confirmButton = {}, dismissButton = { TextButton(onClick = { showAddToPlaylistDialog = false }) { Text("Zavřít", color = Color.Gray) } }, containerColor = Color(0xFF1E1E1E))
         }
@@ -412,7 +413,7 @@ fun SwipeableSongItem(
                     .padding(horizontal = 20.dp),
                 contentAlignment = Alignment.CenterStart
             ) {
-                Icon(Icons.Rounded.QueueMusic, contentDescription = "Přidat do fronty", tint = Color.White)
+                Icon(Icons.AutoMirrored.Rounded.QueueMusic, contentDescription = "Přidat do fronty", tint = Color.White)
             }
         },
         content = {

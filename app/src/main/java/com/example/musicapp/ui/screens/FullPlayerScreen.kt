@@ -16,6 +16,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -124,7 +126,7 @@ fun FullPlayerScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { activeOverlay = PlayerOverlayType.QUEUE; onSheetStateChange(true) }) { Icon(Icons.Rounded.QueueMusic, "Fronta", modifier = Modifier.size(28.dp), tint = contentColor) }
+                IconButton(onClick = { activeOverlay = PlayerOverlayType.QUEUE; onSheetStateChange(true) }) { Icon(Icons.AutoMirrored.Rounded.QueueMusic, "Fronta", modifier = Modifier.size(28.dp), tint = contentColor) }
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.alpha(0.7f)) {
                         val icon = when { outputDeviceName.contains("Bluetooth", true) -> Icons.Rounded.Bluetooth; outputDeviceName.contains("Sluchátka", true) -> Icons.Rounded.Headphones; else -> Icons.Rounded.Speaker }
@@ -298,7 +300,7 @@ fun QueueOverlay(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onDismiss) { Icon(Icons.Rounded.ArrowBack, contentDescription = "Zpět", tint = contentColor) }
+                IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět", tint = contentColor) }
                 Spacer(modifier = Modifier.width(16.dp))
                 Text(text = "Fronta", color = contentColor, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
@@ -391,7 +393,7 @@ fun LyricsOverlay(
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onDismiss) { Icon(Icons.Rounded.ArrowBack, contentDescription = "Zpět", tint = contentColor) }
+            IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Zpět", tint = contentColor) }
             Spacer(modifier = Modifier.width(16.dp))
             Text("Text písně", color = contentColor, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }

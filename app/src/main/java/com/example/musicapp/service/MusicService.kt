@@ -107,7 +107,6 @@ class MusicService : MediaSessionService() {
             override fun onIsPlayingChanged(isPlaying: Boolean) = updateWidget()
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 updateWidget()
-                updateSessionExtras()
             }
             override fun onMediaMetadataChanged(metadata: androidx.media3.common.MediaMetadata) = updateWidget()
             override fun onPlaybackStateChanged(state: Int) = updateWidget()
@@ -129,13 +128,6 @@ class MusicService : MediaSessionService() {
             .build()
     }
 
-    @OptIn(UnstableApi::class)
-    private fun updateSessionExtras() {
-        val id = player?.audioSessionId ?: 0
-        val extras = Bundle().apply {
-            putInt("AUDIO_SESSION_ID", id)
-        }
-    }
 
     private fun updateWidget() {
         val item = player?.currentMediaItem ?: return
@@ -202,12 +194,28 @@ class MusicService : MediaSessionService() {
     override fun onGetSession(info: MediaSession.ControllerInfo) = mediaSession
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (player != null) startForeground()
         when (intent?.action) {
             "PLAY_PAUSE" -> if (player?.isPlaying == true) player?.pause() else player?.play()
             "NEXT" -> player?.seekToNext()
             "PREV" -> player?.seekToPrevious()
         }
         return super.onStartCommand(intent, flags, startId)
+    }
+
+    private fun startForeground() {
+        val notification = androidx.core.app.NotificationCompat.Builder(this, "music_channel")
+            .setContentTitle("Music App")
+            .setContentText("Přehrávání hudby")
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setOngoing(true)
+            .build()
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel("music_channel", "Hudba", android.app.NotificationManager.IMPORTANCE_LOW)
+            val manager = getSystemService(android.app.NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
+        startForeground(1, notification)
     }
 
     override fun onDestroy() {
