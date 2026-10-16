@@ -32,12 +32,13 @@ fun ParticleBackground(
 
     val currentBounceScale by rememberUpdatedState(bounceScale)
 
-    // Hlavní animační smyčka
-    LaunchedEffect(Unit) {
+    // Hlavní animační smyčka (běží jen při přehrávání, šetří baterii při pauze)
+    LaunchedEffect(isPlaying) {
+        if (!isPlaying) return@LaunchedEffect
         var lastTime = System.nanoTime()
         while (isActive) {
             withFrameNanos { time ->
-                val dt = (time - lastTime) / 1_000_000_000f
+                val dt = ((time - lastTime) / 1_000_000_000f).coerceIn(0f, 0.1f)
                 lastTime = time
 
                 val musicEnergy = (currentBounceScale - 1f).coerceAtLeast(0f)

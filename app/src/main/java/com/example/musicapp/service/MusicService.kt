@@ -32,16 +32,25 @@ import kotlinx.coroutines.*
 import java.io.ByteArrayOutputStream
 
 // --- VLASTNÍ NAČÍTAČ PRO SYSTÉMOVÉ NOTIFIKACE (STEJNÝ PRINCIP JAKO V KNIHOVNĚ) ---
-class CustomBitmapLoader(private val context: Context) : BitmapLoader {
+@OptIn(UnstableApi::class)
+class CustomBitmapLoader(
+    private val context: Context,
+    private val scope: CoroutineScope
+) : BitmapLoader {
     override fun supportsMimeType(mimeType: String): Boolean = true
 
     // Zpracování ID3 tagů přímo ze souboru
     override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> {
         val future = SettableFuture.create<Bitmap>()
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             try {
                 val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
-                future.set(scaleBitmap(bitmap))
+                val scaled = scaleBitmap(bitmap)
+                if (scaled != null) {
+                    future.set(scaled)
+                } else {
+                    future.setException(IllegalArgumentException("Nelze dekódovat bitmapu"))
+                }
             } catch (e: Exception) {
                 future.setException(e)
             }
@@ -49,12 +58,12 @@ class CustomBitmapLoader(private val context: Context) : BitmapLoader {
         return future
     }
 
-    // Zpracování URI (použijeme Coil přesně jako to dělá UI aplikace)
+    // Zpracování URI (použijeme sdílený Coil ImageLoader přesně jako UI aplikace)
     override fun loadBitmap(uri: Uri): ListenableFuture<Bitmap> {
         val future = SettableFuture.create<Bitmap>()
-        CoroutineScope(Dispatchers.IO).launch {
+        scope.launch {
             try {
-                val loader = coil.ImageLoader(context)
+                val loader = coil.Coil.imageLoader(context)
                 val request = coil.request.ImageRequest.Builder(context)
                     .data(uri)
                     .allowHardware(false)
@@ -64,7 +73,12 @@ class CustomBitmapLoader(private val context: Context) : BitmapLoader {
                 val result = loader.execute(request)
                 if (result is coil.request.SuccessResult) {
                     val bitmap = result.drawable.toBitmap()
-                    future.set(scaleBitmap(bitmap))
+                    val scaled = scaleBitmap(bitmap)
+                    if (scaled != null) {
+                        future.set(scaled)
+                    } else {
+                        future.setException(Exception("Scaled bitmap is null"))
+                    }
                 } else {
                     future.setException(Exception("Coil failed to load Image"))
                 }
@@ -110,6 +124,10 @@ class MusicService : MediaSessionService() {
             }
             override fun onMediaMetadataChanged(metadata: androidx.media3.common.MediaMetadata) = updateWidget()
             override fun onPlaybackStateChanged(state: Int) = updateWidget()
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                val extras = Bundle().apply { putInt("AUDIO_SESSION_ID", audioSessionId) }
+                mediaSession?.setSessionExtras(extras)
+            }
         })
 
         val intent = Intent(this, MainActivity::class.java).apply {
@@ -124,7 +142,7 @@ class MusicService : MediaSessionService() {
         mediaSession = MediaSession.Builder(this, exoPlayer)
             .setSessionActivity(pendingIntent)
             .setSessionExtras(sessionExtras)
-            .setBitmapLoader(CustomBitmapLoader(applicationContext)) // VLOŽENÍ NAŠEHO COIL LOADERU
+            .setBitmapLoader(CustomBitmapLoader(applicationContext, serviceScope))
             .build()
     }
 
@@ -141,12 +159,16 @@ class MusicService : MediaSessionService() {
         widgetUpdateJob?.cancel()
         widgetUpdateJob = serviceScope.launch {
             delay(200)
+            val manager = GlanceAppWidgetManager(applicationContext)
+            val glanceIds = manager.getGlanceIds(MusicWidget::class.java)
+            if (glanceIds.isEmpty()) return@launch
+
             var bitmap: Bitmap? = null
 
             // Coil načítání pro Glance Widget (Plocha)
             if (artworkUri != null) {
                 try {
-                    val loader = coil.ImageLoader(applicationContext)
+                    val loader = coil.Coil.imageLoader(applicationContext)
                     val request = coil.request.ImageRequest.Builder(applicationContext)
                         .data(artworkUri)
                         .allowHardware(false)
@@ -176,8 +198,6 @@ class MusicService : MediaSessionService() {
                 } catch (e: Exception) { e.printStackTrace() }
             }
 
-            val manager = GlanceAppWidgetManager(applicationContext)
-            val glanceIds = manager.getGlanceIds(MusicWidget::class.java)
             glanceIds.forEach { id ->
                 updateAppWidgetState(applicationContext, id) { prefs ->
                     prefs[MusicWidgetPrefs.title] = title
@@ -193,36 +213,35 @@ class MusicService : MediaSessionService() {
 
     override fun onGetSession(info: MediaSession.ControllerInfo) = mediaSession
 
+    @OptIn(UnstableApi::class)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (player != null) startForeground()
         when (intent?.action) {
             "PLAY_PAUSE" -> if (player?.isPlaying == true) player?.pause() else player?.play()
-            "NEXT" -> player?.seekToNext()
-            "PREV" -> player?.seekToPrevious()
+            "NEXT" -> {
+                player?.seekToNext()
+                player?.play()
+            }
+            "PREV" -> {
+                player?.seekToPrevious()
+                player?.play()
+            }
+            "SET_SKIP_SILENCE" -> {
+                val enabled = intent.getBooleanExtra("enabled", false)
+                player?.skipSilenceEnabled = enabled
+            }
         }
         return super.onStartCommand(intent, flags, startId)
     }
 
-    private fun startForeground() {
-        val notification = androidx.core.app.NotificationCompat.Builder(this, "music_channel")
-            .setContentTitle("Music App")
-            .setContentText("Přehrávání hudby")
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .setOngoing(true)
-            .build()
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val channel = android.app.NotificationChannel("music_channel", "Hudba", android.app.NotificationManager.IMPORTANCE_LOW)
-            val manager = getSystemService(android.app.NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
-        }
-        startForeground(1, notification)
-    }
-
     override fun onDestroy() {
+        widgetUpdateJob?.cancel()
+        serviceScope.cancel()
         mediaSession?.run {
-            player?.release()
+            player.release()
             release()
         }
+        mediaSession = null
+        player = null
         super.onDestroy()
     }
 }
@@ -230,10 +249,6 @@ class MusicService : MediaSessionService() {
 object MusicServiceUtils {
     fun sendIntent(context: Context, action: String) {
         val intent = Intent(context, MusicService::class.java).apply { this.action = action }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
-        }
+        context.startService(intent)
     }
 }

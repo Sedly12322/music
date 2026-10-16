@@ -21,19 +21,23 @@ fun PulseBackground(
 ) {
     val waves = remember { mutableStateListOf<PulseWave>() }
     var timeSinceLastSpawn by remember { mutableLongStateOf(0L) }
+    var tick by remember { mutableLongStateOf(0L) }
+    val currentBounceScale by rememberUpdatedState(bounceScale)
+    val currentIsPlaying by rememberUpdatedState(isPlaying)
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(isPlaying) {
+        if (!isPlaying && waves.isEmpty()) return@LaunchedEffect
         var lastFrameTime = System.nanoTime()
         while (isActive) {
             withFrameNanos { currentTime ->
-                val dt = (currentTime - lastFrameTime) / 1_000_000f
+                val dt = ((currentTime - lastFrameTime) / 1_000_000f).coerceIn(0f, 100f)
                 lastFrameTime = currentTime
                 timeSinceLastSpawn += dt.toLong()
 
-                val energy = (bounceScale - 1f).coerceAtLeast(0f)
-                val spawnThreshold = if (isPlaying) (1200f - (energy * 2000f)).coerceAtLeast(400f) else 3500f
+                val energy = (currentBounceScale - 1f).coerceAtLeast(0f)
+                val spawnThreshold = if (currentIsPlaying) (1200f - (energy * 2000f)).coerceAtLeast(400f) else 3500f
 
-                if (timeSinceLastSpawn > spawnThreshold) {
+                if (currentIsPlaying && timeSinceLastSpawn > spawnThreshold) {
                     waves.add(PulseWave(radius = 0f, alpha = 1f))
                     timeSinceLastSpawn = 0
                 }
@@ -46,13 +50,16 @@ fun PulseBackground(
                     wave.alpha = (1f - (wave.radius / 1500f)).coerceIn(0f, 1f)
                     if (wave.alpha <= 0f) iterator.remove()
                 }
+                tick = currentTime
             }
+            if (!currentIsPlaying && waves.isEmpty()) break
         }
     }
 
     Canvas(modifier = modifier.fillMaxSize()) {
+        val dummy = tick
         val center = Offset(size.width / 2, size.height / 2)
-        val energy = (bounceScale - 1f).coerceAtLeast(0f)
+        val energy = (currentBounceScale - 1f).coerceAtLeast(0f)
         waves.forEach { wave ->
             drawCircle(
                 brush = Brush.radialGradient(

@@ -53,6 +53,7 @@ fun RealAudioVisualizer(viewModel: MusicViewModel, barColor: Color, modifier: Mo
     val isMirrored by viewModel.isVisualizerMirrored.collectAsState() // Stav zrcadlení
 
     val brush = remember(barColor) { Brush.verticalGradient(0.0f to barColor.copy(alpha = 0.2f), 0.5f to barColor, 1.0f to barColor.copy(alpha = 0.2f)) }
+    val reusablePath = remember { Path() }
 
     Canvas(modifier = modifier) {
         if (frequencies.isEmpty()) return@Canvas
@@ -122,9 +123,8 @@ fun RealAudioVisualizer(viewModel: MusicViewModel, barColor: Color, modifier: Mo
             }
 
             VisualizerType.WAVE -> {
-                val path = Path()
+                reusablePath.reset()
 
-                // Připravíme si pole bodů na základě toho, jestli se má vlna zrcadlit
                 val fullWave = if (isMirrored) {
                     val arr = FloatArray(barCount * 2)
                     for (i in 0 until barCount) arr[i] = frequencies[barCount - 1 - i]
@@ -135,10 +135,8 @@ fun RealAudioVisualizer(viewModel: MusicViewModel, barColor: Color, modifier: Mo
                 }
 
                 val stepX = size.width / (fullWave.size - 1).coerceAtLeast(1)
-
-                // Oprava skoku na začátku: Křivku nezahájíme od centerY, ale rovnou v bodě, kde má vlna začít.
                 val firstYOffset = (fullWave[0] * size.height * 1.5f).coerceAtMost(size.height / 2.2f)
-                path.moveTo(0f, centerY - firstYOffset)
+                reusablePath.moveTo(0f, centerY - firstYOffset)
 
                 for (i in 1 until fullWave.size) {
                     val x = i * stepX
@@ -150,15 +148,13 @@ fun RealAudioVisualizer(viewModel: MusicViewModel, barColor: Color, modifier: Mo
                     val midX = (prevX + x) / 2
                     val midY = (prevY + y) / 2
 
-                    // Plynulá křivka
-                    path.quadraticBezierTo(prevX, prevY, midX, midY)
+                    reusablePath.quadraticBezierTo(prevX, prevY, midX, midY)
 
-                    // Přitažení k poslednímu bodu
-                    if (i == fullWave.size - 1) path.lineTo(x, y)
+                    if (i == fullWave.size - 1) reusablePath.lineTo(x, y)
                 }
 
-                drawPath(path, color = barColor.copy(alpha = 0.3f), style = Stroke(width = 16f, cap = StrokeCap.Round, join = StrokeJoin.Round))
-                drawPath(path, color = barColor, style = Stroke(width = 6f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawPath(reusablePath, color = barColor.copy(alpha = 0.3f), style = Stroke(width = 16f, cap = StrokeCap.Round, join = StrokeJoin.Round))
+                drawPath(reusablePath, color = barColor, style = Stroke(width = 6f, cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
 
             VisualizerType.DOTS -> {
@@ -205,7 +201,6 @@ fun RealAudioVisualizer(viewModel: MusicViewModel, barColor: Color, modifier: Mo
                         drawRoundRect(color = barColor, topLeft = Offset(centerX, y), size = Size(w, barHeight), cornerRadius = cornerRadius)
                         drawRoundRect(color = barColor, topLeft = Offset(centerX - w, y), size = Size(w, barHeight), cornerRadius = cornerRadius)
                     } else {
-                        // Když zrcadlení vypneme, budou se vodorovné sloupy vysouvat prostě od kraje zleva.
                         val w = (magnitude * size.width * 0.9f).coerceAtLeast(4f)
                         drawRoundRect(color = barColor, topLeft = Offset(0f, y), size = Size(w, barHeight), cornerRadius = cornerRadius)
                     }
@@ -213,7 +208,7 @@ fun RealAudioVisualizer(viewModel: MusicViewModel, barColor: Color, modifier: Mo
             }
 
             VisualizerType.STAR -> {
-                val path = Path()
+                reusablePath.reset()
                 val baseRadius = size.height / 5f
                 val maxSpike = (size.height / 2.2f) - baseRadius
                 val points = if (isMirrored) barCount * 2 else barCount
@@ -233,13 +228,13 @@ fun RealAudioVisualizer(viewModel: MusicViewModel, barColor: Color, modifier: Mo
                     val x = centerX + (cos(angle) * r).toFloat()
                     val y = centerY + (sin(angle) * r).toFloat()
 
-                    if (i == 0) path.moveTo(x, y)
-                    else path.lineTo(x, y)
+                    if (i == 0) reusablePath.moveTo(x, y)
+                    else reusablePath.lineTo(x, y)
                 }
-                path.close()
+                reusablePath.close()
 
-                drawPath(path, color = barColor.copy(alpha = 0.2f))
-                drawPath(path, color = barColor, style = Stroke(width = 6f, join = StrokeJoin.Round))
+                drawPath(reusablePath, color = barColor.copy(alpha = 0.2f))
+                drawPath(reusablePath, color = barColor, style = Stroke(width = 6f, join = StrokeJoin.Round))
             }
         }
     }

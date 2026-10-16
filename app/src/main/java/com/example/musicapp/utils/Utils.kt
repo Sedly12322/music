@@ -185,12 +185,13 @@ fun getAllAlbums(context: Context): List<Album> {
     return albums
 }
 
+val SPLIT_ARTIST_REGEX = Regex("(?i)\\s+(feat\\.|ft\\.|&|x|vs\\.)\\s+|[,;]\\s+")
+
 fun generateSmartArtists(songs: List<Song>): List<Artist> {
     val artistMap = mutableMapOf<String, MutableSet<Long>>()
     val trackCounts = mutableMapOf<String, Int>()
-    val splitRegex = Regex("(?i)\\s+(feat\\.|ft\\.|&|x|vs\\.)\\s+|[,;]\\s+")
     songs.forEach { song ->
-        song.artist.split(splitRegex).forEach { rawName ->
+        song.artist.split(SPLIT_ARTIST_REGEX).forEach { rawName ->
             val cleanName = rawName.trim()
             if (cleanName.isNotBlank()) {
                 trackCounts[cleanName] = trackCounts.getOrDefault(cleanName, 0) + 1
@@ -202,7 +203,16 @@ fun generateSmartArtists(songs: List<Song>): List<Artist> {
 }
 
 fun getAllArtists(context: Context): List<Artist> = emptyList()
+
 fun formatTime(ms: Long): String {
-    val s = ms / 1000
-    return String.format("%02d:%02d", s / 60, s % 60)
+    val totalSec = (ms / 1000).coerceAtLeast(0L)
+    val min = totalSec / 60
+    val sec = totalSec % 60
+    return buildString(5) {
+        if (min < 10) append('0')
+        append(min)
+        append(':')
+        if (sec < 10) append('0')
+        append(sec)
+    }
 }

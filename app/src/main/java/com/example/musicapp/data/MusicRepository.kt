@@ -22,6 +22,20 @@ class MusicRepository(private val context: Context, private val db: MusicDatabas
     // Ukládá se: "Interpret - Název" -> Seznam řádků
     // Díky tomu se text načte z internetu jen jednou a pak už se bere z paměti (bleskurychlé).
     private val lyricsCache = ConcurrentHashMap<String, List<LyricLine>>()
+    private val artistImageCache = ConcurrentHashMap<String, String>()
+
+    companion object {
+        private val LRC_LINE_REGEX = Regex("\\[(\\d+):(\\d+)[\\.:](\\d+)\\](.*)")
+        private val BRACKETS_REGEX = Regex("\\(.*?\\)|\\[.*?\\]")
+        private val FEAT_REGEX = Regex("(?i)\\s+(feat\\.|ft\\.|&|x|vs\\.).*")
+    }
+
+    fun clearCaches() {
+        lyricsCache.clear()
+        artistImageCache.clear()
+    }
+
+    fun getCachedCount(): Int = lyricsCache.size + artistImageCache.size
 
     // --- KNIHOVNA (Utils) ---
 
@@ -43,9 +57,27 @@ class MusicRepository(private val context: Context, private val db: MusicDatabas
 
     fun getSongUrisForPlaylist(playlistId: Long): Flow<List<String>> = playlistDao.getSongUrisForPlaylist(playlistId)
 
-    suspend fun getFavoritesPlaylist(): Playlist? = playlistDao.getFavoritesPlaylist()
+    fun getFavoriteSongUris(): Flow<List<String>> = playlistDao.getFavoriteSongUris()
 
-    suspend fun createPlaylist(name: String) = playlistDao.insertPlaylist(Playlist(name = name))
+    suspend fun getOrCreateFavoritesPlaylist(): Playlist {
+        return playlistDao.getFavoritesPlaylist() ?: run {
+            val id = playlistDao.insertPlaylist(Playlist(name = "Oblíbené", isSystem = true))
+            Playlist(playlistId = id, name = "Oblíbené", isSystem = true)
+        }
+    }
+
+    suspend fun createPlaylist(name: String) {
+        if (name.isNotBlank()) {
+            playlistDao.insertPlaylist(Playlist(name = name.trim()))
+        }
+    }
+
+    suspend fun deletePlaylist(playlist: Playlist) {
+        if (!playlist.isSystem) {
+            playlistDao.clearPlaylistSongs(playlist.playlistId)
+            playlistDao.deletePlaylist(playlist.playlistId)
+        }
+    }
 
     suspend fun addSongToPlaylist(playlistId: Long, songUri: String) {
         playlistDao.insertPlaylistSong(PlaylistSongCrossRef(playlistId, songUri))
@@ -57,26 +89,34 @@ class MusicRepository(private val context: Context, private val db: MusicDatabas
 
     // --- SÍŤOVÉ VOLÁNÍ (API) ---
 
-    // 1. Obrázky umělců (Deezer)
+    // 1. Obrázky umělců (Deezer) - s mezipamětí i pro prázdné výsledky (zabraňuje opakovaným dotazům při scrollování)
     suspend fun fetchArtistImageUrl(artistName: String): String? = withContext(Dispatchers.IO) {
+        artistImageCache[artistName]?.let { cached ->
+            return@withContext cached.ifEmpty { null }
+        }
+        var connection: HttpURLConnection? = null
         try {
             val query = Uri.encode(artistName)
             val urlStr = "https://api.deezer.com/search/artist?q=$query&limit=1"
-            val connection = URL(urlStr).openConnection() as HttpURLConnection
+            connection = URL(urlStr).openConnection() as HttpURLConnection
             connection.connectTimeout = 5000
             connection.readTimeout = 5000
-            if (connection.responseCode == 200) {
+            val foundUrl = if (connection.responseCode == 200) {
                 val stream = connection.inputStream.bufferedReader().use { it.readText() }
                 val json = JSONObject(stream)
                 val data = json.optJSONArray("data")
                 if (data != null && data.length() > 0) {
                     val artistObj = data.getJSONObject(0)
-                    artistObj.optString("picture_xl") ?: artistObj.optString("picture_medium")
+                    artistObj.optString("picture_xl").takeIf { it.isNotEmpty() }
+                        ?: artistObj.optString("picture_medium").takeIf { it.isNotEmpty() }
                 } else null
             } else null
+            artistImageCache[artistName] = foundUrl ?: ""
+            foundUrl
         } catch (e: Exception) {
-            e.printStackTrace()
             null
+        } finally {
+            connection?.disconnect()
         }
     }
 
@@ -85,9 +125,7 @@ class MusicRepository(private val context: Context, private val db: MusicDatabas
         val cacheKey = "$artist - $title"
 
         // 1. KONTROLA CACHE: Pokud už text máme, vrátíme ho hned
-        if (lyricsCache.containsKey(cacheKey)) {
-            return@withContext lyricsCache[cacheKey]!!
-        }
+        lyricsCache[cacheKey]?.let { return@withContext it }
 
         // 2. POKUS A: Vyčištěné názvy (největší šance na úspěch)
         val cleanArtist = cleanString(artist)
@@ -96,14 +134,12 @@ class MusicRepository(private val context: Context, private val db: MusicDatabas
         var lines = attemptFetchLyrics(cleanArtist, cleanTitle)
 
         // 3. POKUS B: Původní názvy (pokud čištění selhalo nebo smazalo důležitou část)
-        // Zkusíme to jen tehdy, pokud se vyčištěné názvy liší od původních
         if (lines == null && (cleanArtist != artist || cleanTitle != title)) {
             lines = attemptFetchLyrics(artist, title)
         }
 
         val result = lines ?: listOf(LyricLine(0, "Text nebyl nalezen", false))
 
-        // Uložíme výsledek do cache (i když se nenašel, abychom to nezkoušeli pořád dokola)
         if (lines != null) {
             lyricsCache[cacheKey] = result
         }
@@ -113,10 +149,7 @@ class MusicRepository(private val context: Context, private val db: MusicDatabas
 
     // Pomocná metoda pro jeden pokus o stažení
     private fun attemptFetchLyrics(artist: String, title: String): List<LyricLine>? {
-        // A. LrcLib (preferované - synchronizované)
         var result = fetchLyricsFromLrcLib(artist, title)
-
-        // B. Lyrics.ovh (fallback - prostý text)
         if (result == null) {
             val plainText = fetchLyricsFromOvh(artist, title)
             if (plainText != null) result = parsePlainLyrics(plainText)
@@ -125,10 +158,11 @@ class MusicRepository(private val context: Context, private val db: MusicDatabas
     }
 
     private fun fetchLyricsFromLrcLib(artist: String, title: String): List<LyricLine>? {
+        var connection: HttpURLConnection? = null
         return try {
             val urlStr = "https://lrclib.net/api/get?artist_name=${Uri.encode(artist)}&track_name=${Uri.encode(title)}"
-            val connection = URL(urlStr).openConnection() as HttpURLConnection
-            connection.connectTimeout = 5000 // 5s timeout
+            connection = URL(urlStr).openConnection() as HttpURLConnection
+            connection.connectTimeout = 5000
             connection.readTimeout = 5000
             if (connection.responseCode == 200) {
                 val stream = connection.inputStream.bufferedReader().use { it.readText() }
@@ -142,34 +176,40 @@ class MusicRepository(private val context: Context, private val db: MusicDatabas
                     if (plain.isNotEmpty() && plain != "null") parsePlainLyrics(plain) else null
                 }
             } else null
-        } catch (e: Exception) { null }
+        } catch (e: Exception) {
+            null
+        } finally {
+            connection?.disconnect()
+        }
     }
 
     private fun fetchLyricsFromOvh(artist: String, title: String): String? {
+        var connection: HttpURLConnection? = null
         return try {
             val urlStr = "https://api.lyrics.ovh/v1/${Uri.encode(artist)}/${Uri.encode(title)}"
-            val connection = URL(urlStr).openConnection() as HttpURLConnection
+            connection = URL(urlStr).openConnection() as HttpURLConnection
             connection.connectTimeout = 5000
             connection.readTimeout = 5000
             if (connection.responseCode == 200) {
                 val stream = connection.inputStream.bufferedReader().use { it.readText() }
                 JSONObject(stream).optString("lyrics").takeIf { it.isNotEmpty() && it != "null" }
             } else null
-        } catch (e: Exception) { null }
+        } catch (e: Exception) {
+            null
+        } finally {
+            connection?.disconnect()
+        }
     }
 
     // --- PARSOVÁNÍ ---
 
     private fun parseLrcLyrics(lrc: String): List<LyricLine> {
         val lines = mutableListOf<LyricLine>()
-        // Regex pro časové značky: [mm:ss.xx] nebo [mm:ss:xxx]
-        val regex = Regex("\\[(\\d+):(\\d+)[\\.:](\\d+)\\](.*)")
 
         lrc.lines().forEach { line ->
-            val match = regex.find(line)
+            val match = LRC_LINE_REGEX.find(line)
             if (match != null) {
                 val (min, sec, centisec, text) = match.destructured
-                // Ošetření délky milisekund (2 cifry = x10 ms, 3 cifry = x1 ms)
                 val msMultiplier = if (centisec.length == 3) 1 else 10
 
                 val timeMs = (min.toLong() * 60 * 1000) +
@@ -188,21 +228,11 @@ class MusicRepository(private val context: Context, private val db: MusicDatabas
 
     // --- CHYTRÉ ČIŠTĚNÍ NÁZVŮ ---
     private fun cleanString(input: String): String {
-        var text = input
-
-        // 1. Odstranit obsah v kulatých a hranatých závorkách (např. "(Remastered)", "[Official]")
-        // Používáme non-greedy matching .*? aby to smazalo jen obsah závorky
-        text = text.replace(Regex("\\(.*?\\)|\\[.*?\\]"), "")
-
-        // 2. Odstranit "feat." nebo "ft." a vše za tím (často to API mate)
-        text = text.replace(Regex("(?i)\\s+(feat\\.|ft\\.|&|x|vs\\.).*"), "")
-
-        // 3. Odstranit " - " pokud je to oddělovač (např. "Artist - Title - Remaster")
-        // Ale POZOR: Neodstraňovat pomlčky uvnitř slov (T-Pain, Jay-Z)
+        var text = input.replace(BRACKETS_REGEX, "")
+        text = text.replace(FEAT_REGEX, "")
         if (text.contains(" - ")) {
             text = text.substringBefore(" - ")
         }
-
         return text.trim()
     }
 }

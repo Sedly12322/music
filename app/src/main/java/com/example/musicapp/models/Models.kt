@@ -1,6 +1,7 @@
 package com.example.musicapp.model
 
 import android.net.Uri
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -9,25 +10,35 @@ enum class VisualizerType(val title: String) {
     BARS("Sloupce"),
     CIRCLE("Kruh"),
     WAVE("Vlna"),
-    DOTS("Body"),      // NOVÉ
-    MIRROR("Zrcadlo"), // NOVÉ
-    STAR("Hvězda")     // NOVÉ
+    DOTS("Body"),
+    MIRROR("Zrcadlo"),
+    STAR("Hvězda")
 }
 
 enum class LibraryTab { SONGS, ARTISTS, ALBUMS, PLAYLISTS }
 
 sealed interface LibraryItem
+@Immutable
 data class FolderItem(val name: String, val uri: Uri) : LibraryItem
+@Immutable
 data class SongItem(val song: Song) : LibraryItem
 
+@Immutable
 data class Breadcrumb(val name: String, val uri: Uri)
 
+@Immutable
 data class LyricLine(val time: Long, val text: String, val isSynced: Boolean = true)
 
-enum class SortOption { TITLE_ASC, TITLE_DESC, TRACK_NUMBER }
+enum class SortOption(val title: String) {
+    TITLE_ASC("Název (A–Z)"),
+    TITLE_DESC("Název (Z–A)"),
+    ARTIST_ASC("Interpret"),
+    DURATION_DESC("Nejdelší")
+}
 
 // --- ENTITY PRO DATABÁZI (ROOM) ---
 
+@Immutable
 @Entity(tableName = "playlists")
 data class Playlist(
     @PrimaryKey(autoGenerate = true) val playlistId: Long = 0,
@@ -44,6 +55,7 @@ data class PlaylistSongCrossRef(
 
 // --- PŮVODNÍ MODELY ---
 
+@Immutable
 data class Song(
     val id: Long,
     val uri: Uri,
@@ -57,6 +69,7 @@ data class Song(
     val duration: Long
 )
 
+@Immutable
 data class Artist(
     val id: Long,
     val name: String,
@@ -64,6 +77,7 @@ data class Artist(
     val numberOfAlbums: Int
 )
 
+@Immutable
 data class Album(
     val id: Long,
     val title: String,
